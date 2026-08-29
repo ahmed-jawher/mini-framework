@@ -1,0 +1,11 @@
+{
+  "name": "mini-framework",
+  "version": "1.0.0",
+  "description": "A dependency-free front-end framework: virtual DOM, routing, state management and a custom event system.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node serve.js",
+    "serve": "node serve.js"
+  }
+}
