@@ -16,7 +16,7 @@ import {
   completedCount,
 } from "./todos.js";
 
-const app = createApp({ root: "#app", state: initialState, mode: "hash" });
+const app = createApp({ root: "#app", state: initialState });
 
 // The list survives a reload; `pick` keeps transient UI state out of storage.
 app.store.persist("mini-framework-todomvc", { pick: ["todos"] });

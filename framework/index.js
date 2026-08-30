@@ -20,20 +20,7 @@ export {
   patch,
   patchNode,
   render,
-  updateDOM,
   toJSON,
   TEXT,
 } from "./vdom.js";
-export {
-  on,
-  once,
-  off,
-  onKey,
-  emit,
-  subscribe,
-  attachHandler,
-  removeHandler,
-  detachHandlers,
-  resetEvents,
-} from "./events.js";
-export { setRef, getRef, clearRef, clearRefs } from "./refs.js";
+export { on, onKey } from "./events.js";

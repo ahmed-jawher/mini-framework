@@ -11,7 +11,7 @@
  *   onUnmount()  when the route moves away, before the markup is replaced
  *
  * Anything returned by `onMount` that is a function is treated as a cleanup
- * and run on unmount, which is the tidy way to dispose of `on(...)` handlers.
+ * and run on unmount, which is the tidy way to dispose of `onKey(...)` handles.
  */
 
 import { createElement } from "./vdom.js";
@@ -21,8 +21,7 @@ export class Component {
     this.app = app;
     this.store = app ? app.store : null;
     this.router = app ? app.router : null;
-    this.context = context;      // { path, params, query, route }
-    this.props = context.props || {};
+    this.context = context;      // { route, path, params }
     this.state = {};             // component-local state
     this._cleanups = [];
     this._mounted = false;
@@ -30,22 +29,21 @@ export class Component {
 
   /** Component-local state. Merges and asks the app to re-render. */
   setState(patch) {
-    const partial = typeof patch === "function" ? patch(this.state) : patch;
-    this.state = { ...this.state, ...partial };
+    this.state = { ...this.state, ...patch };
     if (this.app) this.app.requestRender();
     return this.state;
   }
 
   /** Shared application state — same store everywhere. */
-  getState(path, fallback) {
-    return this.store ? this.store.get(path, fallback) : fallback;
+  getState(key, fallback) {
+    return this.store ? this.store.get(key, fallback) : fallback;
   }
 
-  setGlobalState(path, value) {
-    return this.store ? this.store.set(path, value) : undefined;
+  setGlobalState(key, value) {
+    return this.store ? this.store.set(key, value) : undefined;
   }
 
-  /** Register a teardown to run on unmount (e.g. the `off()` from `on(...)`). */
+  /** Register a teardown to run on unmount (e.g. the `off()` from `onKey`). */
   onCleanup(fn) {
     if (typeof fn === "function") this._cleanups.push(fn);
     return fn;
@@ -87,12 +85,13 @@ export class Component {
   }
 }
 
+/** Shown when no registered route matches, instead of a blank page. */
 export class NotFoundComponent extends Component {
   render() {
     return createElement("section", { class: "not-found" }, [
       createElement("h1", {}, ["404 — Not Found"]),
       createElement("p", {}, [`No route matches ${this.context.path || ""}`]),
-      createElement("a", { href: this.router ? this.router.href("/") : "#/" }, ["Go home"]),
+      createElement("a", { href: "#/" }, ["Go home"]),
     ]);
   }
 }

@@ -3,7 +3,7 @@
  *
  * A page is described as a plain object tree:
  *
- *   { tag: "div", attrs: { class: "nameSubm" }, children: [ ... ] }
+ *   { tag: "div", attrs: { class: "todoapp" }, children: [ ... ] }
  *
  * `createElement` builds those objects, `mount` turns one into real DOM, and
  * `patch` compares two of them and touches only the nodes that actually
@@ -13,8 +13,7 @@
  * and checkbox state alive across renders.
  */
 
-import { attachHandler, removeHandler, detachHandlers, normalizeType } from "./events.js";
-import { setRef } from "./refs.js";
+import { attachHandler, removeHandler, detachHandlers } from "./events.js";
 
 export const TEXT = "#text";
 
@@ -41,9 +40,11 @@ function queueRef(fn, element) {
   });
 }
 
-/** Attributes that must be written as DOM properties, not attributes. */
-const PROPERTIES = new Set(["value", "checked", "selected", "indeterminate", "innerHTML"]);
-const BOOLEAN = new Set(["checked", "selected", "disabled", "readonly", "required", "autofocus", "multiple", "hidden", "open"]);
+/* `value` and `checked` must be written as DOM properties: the matching HTML
+   attribute only sets the *default*, while the property is what the user sees.
+   `checked` is also mirrored as an attribute so CSS selectors keep working. */
+const PROPERTIES = new Set(["value", "checked"]);
+const BOOLEAN = new Set(["checked"]);
 
 /**
  * createElement(tag, attrs?, children?)
@@ -81,6 +82,8 @@ export function isVNode(value) {
   return !!value && typeof value === "object" && typeof value.tag === "string";
 }
 
+/* Drops null/undefined/booleans so `cond && h(...)` is safe, flattens nested
+   arrays, and turns strings and numbers into text nodes. */
 function normalizeChildren(children) {
   const out = [];
   const walk = (child) => {
@@ -103,9 +106,7 @@ export function mount(vnode) {
     return node;
   }
 
-  const element = vnode.attrs && vnode.attrs.xmlns
-    ? document.createElementNS(vnode.attrs.xmlns, vnode.tag)
-    : document.createElement(vnode.tag);
+  const element = document.createElement(vnode.tag);
 
   for (const name of Object.keys(vnode.attrs)) {
     setAttribute(element, name, vnode.attrs[name]);
@@ -118,27 +119,24 @@ export function mount(vnode) {
   return element;
 }
 
-/** Back-compat name used by the first version of this framework. */
-export const VDomToRealDom = mount;
+/** Handler attributes are `on` + the capitalised event name: onClick, onBlur. */
+function isEventName(name) {
+  return /^on[A-Z]/.test(name);
+}
+
+function eventType(name) {
+  return name.slice(2).toLowerCase();
+}
 
 function setAttribute(element, name, value) {
-  if (name === "key") return;
-
   if (name === "ref") {
-    // String refs only record the element, so they can resolve immediately.
     if (typeof value === "function") queueRef(value, element);
-    else setRef(String(value), element);
     return;
   }
 
   if (isEventName(name)) {
-    if (typeof value === "function") attachHandler(element, name, value);
-    else removeHandler(element, name);
-    return;
-  }
-
-  if (name === "style") {
-    applyStyle(element, value);
+    if (typeof value === "function") attachHandler(element, eventType(name), value);
+    else removeHandler(element, eventType(name));
     return;
   }
 
@@ -149,14 +147,7 @@ function setAttribute(element, name, value) {
     return;
   }
 
-  if (name === "dataset" && value && typeof value === "object") {
-    for (const key of Object.keys(value)) element.dataset[key] = value[key];
-    return;
-  }
-
   if (PROPERTIES.has(name)) {
-    // Writing `value`/`checked` as attributes only sets the *default*; the live
-    // property is what the user sees, so set both where it matters.
     if (element[name] !== value) element[name] = value === null || value === undefined ? "" : value;
     if (BOOLEAN.has(name)) {
       if (value) element.setAttribute(name, "");
@@ -165,9 +156,11 @@ function setAttribute(element, name, value) {
     return;
   }
 
-  if (BOOLEAN.has(name) || typeof value === "boolean") {
-    if (value === false || value === null || value === undefined) element.removeAttribute(name);
-    else element.setAttribute(name, value === true ? "" : String(value));
+  // Any boolean-valued attribute: true adds the bare attribute, false removes
+  // it — never disabled="false", which the browser reads as disabled.
+  if (typeof value === "boolean") {
+    if (value) element.setAttribute(name, "");
+    else element.removeAttribute(name);
     return;
   }
 
@@ -179,56 +172,32 @@ function setAttribute(element, name, value) {
   element.setAttribute(name, String(value));
 }
 
-function removeAttribute(element, name, oldValue) {
-  if (name === "key" || name === "ref") return;
-  if (isEventName(name)) { removeHandler(element, name); return; }
-  if (name === "style") { element.removeAttribute("style"); return; }
+function removeAttribute(element, name) {
+  if (name === "ref") return;
+  if (isEventName(name)) { removeHandler(element, eventType(name)); return; }
   if (name === "className") { element.removeAttribute("class"); return; }
   if (PROPERTIES.has(name)) {
-    element[name] = name === "checked" || name === "selected" ? false : "";
+    element[name] = name === "checked" ? false : "";
     if (BOOLEAN.has(name)) element.removeAttribute(name);
-    return;
-  }
-  if (name === "dataset" && oldValue && typeof oldValue === "object") {
-    for (const key of Object.keys(oldValue)) delete element.dataset[key];
     return;
   }
   element.removeAttribute(name);
 }
 
-function isEventName(name) {
-  return /^on[-A-Z]/.test(name) || (name.startsWith("on") && name.length > 2 && name === name.toLowerCase());
-}
-
+/** class accepts a string or an object whose truthy keys become class names. */
 function toClassName(value) {
   if (!value) return "";
   if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.filter(Boolean).join(" ");
   if (typeof value === "object") {
     return Object.keys(value).filter((k) => value[k]).join(" ");
   }
   return String(value);
 }
 
-function applyStyle(element, value) {
-  if (typeof value === "string") { element.setAttribute("style", value); return; }
-  element.removeAttribute("style");
-  if (value && typeof value === "object") {
-    for (const key of Object.keys(value)) {
-      const v = value[key];
-      if (v === null || v === undefined || v === false) continue;
-      if (key.startsWith("--")) element.style.setProperty(key, String(v));
-      else element.style[key] = v;
-    }
-  }
-}
-
 /* ── diffing ────────────────────────────────────────────────────────────── */
 
 function isDifferentType(a, b) {
-  if (a.tag !== b.tag) return true;
-  if (a.key !== b.key) return true;
-  return false;
+  return a.tag !== b.tag || a.key !== b.key;
 }
 
 /**
@@ -279,7 +248,7 @@ export function patchNode(element, oldVNode, newVNode) {
 
 function patchAttributes(element, oldAttrs = {}, newAttrs = {}) {
   for (const name of Object.keys(oldAttrs)) {
-    if (!(name in newAttrs)) removeAttribute(element, name, oldAttrs[name]);
+    if (!(name in newAttrs)) removeAttribute(element, name);
   }
   for (const name of Object.keys(newAttrs)) {
     const next = newAttrs[name];
@@ -287,34 +256,20 @@ function patchAttributes(element, oldAttrs = {}, newAttrs = {}) {
     // Handlers are re-registered every render: the identity of an inline arrow
     // function changes each time, and the registry only ever holds one entry.
     if (isEventName(name)) { setAttribute(element, name, next); continue; }
+    // Properties are re-applied even when unchanged because the user may have
+    // typed into the element since the last render; objects (class) are
+    // rebuilt each render and so never compare equal.
     if (prev === next && !PROPERTIES.has(name) && typeof next !== "object") continue;
     setAttribute(element, name, next);
   }
 }
 
+/**
+ * One algorithm covers both cases: a child with a `key` is identified by that
+ * key, a child without one by its position. So an unkeyed list is diffed
+ * positionally, and a keyed list survives reordering and deletion.
+ */
 function patchChildren(parent, oldChildren = [], newChildren = []) {
-  const keyed = newChildren.some((c) => c.key !== null) || oldChildren.some((c) => c.key !== null);
-  if (!keyed) {
-    patchUnkeyed(parent, oldChildren, newChildren);
-    return;
-  }
-  patchKeyed(parent, oldChildren, newChildren);
-}
-
-function patchUnkeyed(parent, oldChildren, newChildren) {
-  const common = Math.min(oldChildren.length, newChildren.length);
-  for (let i = 0; i < common; i++) patch(parent, oldChildren[i], newChildren[i], i);
-
-  for (let i = common; i < newChildren.length; i++) {
-    parent.appendChild(mount(newChildren[i]));
-  }
-  for (let i = oldChildren.length - 1; i >= newChildren.length; i--) {
-    const node = parent.childNodes[i];
-    if (node) { detachHandlers(node); parent.removeChild(node); }
-  }
-}
-
-function patchKeyed(parent, oldChildren, newChildren) {
   // Snapshot the DOM nodes that belong to the old children before we move any.
   const oldNodes = [];
   for (let i = 0; i < oldChildren.length; i++) oldNodes[i] = parent.childNodes[i];
@@ -374,13 +329,7 @@ export function render(vnode, container, oldVNode = null) {
   return vnode;
 }
 
-/** Back-compat: the original signature (parent element, old tree, new tree). */
-export function updateDOM(parent, oldVTree, newVTree) {
-  if (!parent) return;
-  patch(parent.parentNode || parent, oldVTree, newVTree, 0);
-}
-
-/** Debug helper: the JSON shape described in the brief. */
+/** Debug helper: shows that the DOM really is described as plain JSON. */
 export function toJSON(vnode) {
   if (vnode.tag === TEXT) return vnode.text;
   return {

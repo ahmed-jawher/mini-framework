@@ -14,10 +14,9 @@ mini-framework-main/
 │   ├── vdom.js     #   DOM abstraction: createElement, mount, keyed diff/patch
 │   ├── events.js   #   event system: handler registry + root dispatcher
 │   ├── state.js    #   state management: the Store
-│   ├── router.js   #   routing: hash and history modes
+│   ├── router.js   #   routing: hash URLs, named params
 │   ├── app.js      #   wiring: store + router + renderer
-│   ├── component.js#   the Component base class and lifecycle
-│   └── refs.js     #   element reference registry
+│   └── component.js#   the Component base class and lifecycle
 ├── todomvc/        # a full application built with the framework
 ├── index.html      # loads todomvc/main.js
 └── serve.js        # zero-dependency static file server
